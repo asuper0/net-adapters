@@ -1,0 +1,1 @@
+A simple lib to get all net adapters in windows. The code is copied from [heim-net](https://github.com/heim-rs/heim/tree/master/heim-net), which last commit is 3 years ago, and can't build in my environment.
