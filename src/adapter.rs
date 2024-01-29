@@ -56,6 +56,7 @@ mod from_heim_net {
         gateway: Vec<IpAddr>,
         dns: Vec<IpAddr>,
         dhcp_server: Option<IpAddr>,
+        dhcp_on: bool,
     }
 
     pub fn nic() -> Result<Vec<Nic>> {
@@ -172,6 +173,7 @@ mod from_heim_net {
                 dns,
                 gateway,
                 dhcp_server: sockaddr_to_ipv4(cur_iface.Dhcpv4Server),
+                dhcp_on: cur_iface.Dhcpv4Enabled() != 0,
             };
             results.push(base_nic);
 
@@ -267,6 +269,7 @@ mod from_heim_net {
                     gateway: Vec::new(),
                     dns: Vec::new(),
                     dhcp_server: Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+                    dhcp_on,
                 },
                 false => {
                     if address.is_none() {
@@ -287,6 +290,7 @@ mod from_heim_net {
                         gateway: gateway,
                         dns: dns,
                         dhcp_server: None,
+                        dhcp_on,
                     }
                 }
             };
