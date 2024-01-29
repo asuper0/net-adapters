@@ -325,6 +325,10 @@ mod from_heim_net {
             &self.dhcp_server
         }
 
+        pub fn dhcp_on(&self) -> bool {
+            self.dhcp_on
+        }
+
         pub fn destination(&self) -> Option<std::net::IpAddr> {
             // TODO: we could implement something one day
             None
