@@ -114,7 +114,7 @@ mod from_heim_net {
             let iface_guid_cstr;
             let iface_fname_ucstr;
             let is_up;
-            let mut cur_address;
+            let no_address;
 
             unsafe {
                 iface_index = cur_iface.u.s().IfIndex;
@@ -122,7 +122,7 @@ mod from_heim_net {
                 // iface_fname_ucstr = UCStr::from_ptr_str(cur_iface.FriendlyName);
                 iface_fname_ucstr =
                     widestring::ucstring::WideCString::from_ptr_str(cur_iface.FriendlyName);
-                cur_address = *(cur_iface.FirstUnicastAddress);
+                no_address = cur_iface.FirstUnicastAddress.is_null();
                 is_up = cur_iface.OperStatus == IfOperStatusUp;
             }
             let iface_guid = iface_guid_cstr
@@ -134,32 +134,41 @@ mod from_heim_net {
             let mut address = Vec::with_capacity(2);
 
             // Walk through every IP address of this interface
-            loop {
-                let this_socket_address = cur_address.Address;
-                let this_netmask_length = cur_address.OnLinkPrefixLength;
-                let this_sa_family = unsafe { (*this_socket_address.lpSockaddr).sa_family };
+            if no_address {
+                eprintln!(
+                    "no address, index: {}, name: {}",
+                    iface_index, iface_friendly_name
+                );
+            } else {
+                let mut cur_address = unsafe { *(cur_iface.FirstUnicastAddress) };
 
-                let (this_address, this_netmask) = match this_sa_family as i32 {
-                    AF_INET => (
-                        sockaddr_to_ipv4(this_socket_address),
-                        Some(ipv4_netmask_address_from(this_netmask_length)),
-                    ),
-                    AF_INET6 => (
-                        sockaddr_to_ipv6(this_socket_address),
-                        Some(ipv6_netmask_address_from(this_netmask_length)),
-                    ),
-                    _ => (None, None),
-                };
+                loop {
+                    let this_socket_address = cur_address.Address;
+                    let this_netmask_length = cur_address.OnLinkPrefixLength;
+                    let this_sa_family = unsafe { (*this_socket_address.lpSockaddr).sa_family };
 
-                if let (Some(ip), Some(netmask)) = (this_address, this_netmask) {
-                    address.push(Address { ip, netmask });
+                    let (this_address, this_netmask) = match this_sa_family as i32 {
+                        AF_INET => (
+                            sockaddr_to_ipv4(this_socket_address),
+                            Some(ipv4_netmask_address_from(this_netmask_length)),
+                        ),
+                        AF_INET6 => (
+                            sockaddr_to_ipv6(this_socket_address),
+                            Some(ipv6_netmask_address_from(this_netmask_length)),
+                        ),
+                        _ => (None, None),
+                    };
+
+                    if let (Some(ip), Some(netmask)) = (this_address, this_netmask) {
+                        address.push(Address { ip, netmask });
+                    }
+
+                    let next_address = cur_address.Next;
+                    if next_address.is_null() {
+                        break;
+                    }
+                    cur_address = unsafe { *next_address };
                 }
-
-                let next_address = cur_address.Next;
-                if next_address.is_null() {
-                    break;
-                }
-                cur_address = unsafe { *next_address };
             }
 
             let dns = get_dns(cur_iface.FirstDnsServerAddress);
@@ -286,9 +295,9 @@ mod from_heim_net {
                         guid: guid.to_string(),
                         friendly_name: name.to_string(),
                         is_up: false,
-                        address: address,
-                        gateway: gateway,
-                        dns: dns,
+                        address,
+                        gateway,
+                        dns,
                         dhcp_server: None,
                         dhcp_on,
                     }
@@ -568,8 +577,8 @@ mod from_heim_net {
     /// Generate an IPv4 netmask from a prefix length (Rust equivalent of ConvertLengthToIpv4Mask())
     fn ipv4_netmask_from(length: u8) -> Ipv4Addr {
         let mask = match length {
-        len if len <= 32 => u32::max_value().checked_shl(32 - len as u32).unwrap_or(0),
-        _ /* invalid value */ => u32::max_value(),
+        len if len <= 32 => u32::MAX.checked_shl(32 - len as u32).unwrap_or(0),
+        _ /* invalid value */ => u32::MAX,
     };
         Ipv4Addr::from(mask)
     }
@@ -577,8 +586,8 @@ mod from_heim_net {
     /// Generate an IPv6 netmask from a prefix length
     fn ipv6_netmask_from(length: u8) -> Ipv6Addr {
         let mask = match length {
-        len if len <= 128 => u128::max_value().checked_shl(128 - len as u32).unwrap_or(0),
-        _ /* invalid value */ => u128::max_value(),
+        len if len <= 128 => u128::MAX.checked_shl(128 - len as u32).unwrap_or(0),
+        _ /* invalid value */ => u128::MAX,
     };
         Ipv6Addr::from(mask)
     }
